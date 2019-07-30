@@ -1,0 +1,9 @@
+{
+  "name": "Django ONEm Postboard app",
+  "description": "Django ONEm Postboard app",
+  "repository": "https://github.com/bogdanta/postdev",
+  "keywords": ["django", "onem", "postdev", "sms", "app"],
+  "env": {
+      "DISABLE_COLLECTSTATIC": "1"
+  }
+}
