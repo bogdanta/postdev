@@ -9,6 +9,7 @@ from ago import human
 from hashids import Hashids
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
@@ -109,7 +110,7 @@ class AddPostView(View):
         form_items = [
             FormItemContent(type=FormItemContentType.string,
                      name='title',
-                     description='Give your new post a title (maximum 64 characters',
+                     description='Give your new post a title (maximum 64 characters)',
                      header='add',
                      footer='Reply with post title or BACK'),
             FormItemContent(type=FormItemContentType.string,
@@ -154,6 +155,7 @@ class AddPostView(View):
         new_post.code = hashids.encode(new_post.id)
         new_post.save()
 
+        cache.set('new_post', True)
         return HttpResponseRedirect(reverse('post_detail', args=[new_post.id]))
 
 
@@ -163,6 +165,10 @@ class MyPostsListView(View):
     def get(self, request):
         # TODO: later improvement - check for expired posts
         menu_items = []
+
+        if cache.get('post_deleted'):
+            menu_items.extend([MenuItem(description='Post successfuly deleted!')])
+
         posts = Post.objects.filter(user=self.get_user()).order_by('-created_at')
         if posts:
             for post in posts:
@@ -188,14 +194,27 @@ class PostDetailView(View):
         post.views += 1
         post.save()
 
-        menu_items = [
-            MenuItem(description=u'\n'.join([
-                post.description,
-                'Author: {}'.format(post.user.username),
-                'Expires in: {}'.format(human(post.expires_at)),
-                'Code: {}'.format(post.code),
-                'Views: {}'.format(post.views)]))
+        menu_items = []
+        body_pre = [
+            post.description,
+            'Author: {}'.format(post.user.username),
+            'Expires in: {}'.format(human(post.expires_at)),
+            'Code: {}'.format(post.code),
+            'Views: {}'.format(post.views)
         ]
+
+        # check to see if we have notifications set in cache for this post
+        if cache.get('new_post'):
+            body_pre.insert(0, 'Post successfuly created!')
+            cache.delete('new_post')
+        elif cache.get('post_private'):
+            body_pre.insert(0, 'Post marked as private!')
+            cache.delete('post_private')
+        elif cache.get('post_renewed'):
+            body_pre.insert(0, 'Post successfuly renewed!')
+            cache.delete('post_renewed')
+
+        menu_items.extend([MenuItem(description=u'\n'.join(body_pre))])
 
         if post.user == self.get_user():
             # viewing user is the post owner
@@ -233,12 +252,14 @@ class PostDetailView(View):
         post = get_object_or_404(Post, id=id)                                    
         post.is_private = True
         post.save()
+        cache.set('post_private', True)
         return HttpResponseRedirect(reverse('post_detail', args=[id]))
 
 
     def delete(self, request, id):
         post = get_object_or_404(Post, id=id)                                    
         post.delete()
+        cache.set('post_deleted', True)
         return HttpResponseRedirect(reverse('my_posts'))
 
     def patch(self, request, id):
@@ -248,6 +269,7 @@ class PostDetailView(View):
         expires_at = now + datetime.timedelta(days=14)
         post.expires_at = expires_at
         post.save()
+        cache.set('post_renewed', True)
         return HttpResponseRedirect(reverse('post_detail', args=[id]))
 
 
