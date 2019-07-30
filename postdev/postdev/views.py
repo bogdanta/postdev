@@ -38,7 +38,7 @@ class View(_View):
 
         data = jwt.decode(token.replace('Bearer ', ''), key='87654321')
         user, created = User.objects.get_or_create(id=data['sub'])
-                                                   #username=str(data['sub']))
+
         return user
 
     def to_response(self, content):
@@ -83,9 +83,9 @@ class HomeView(View):
                 user=self.get_user()
             ).exclude(
                 is_private=True
-            ).order_by('-created_at')
+                ).order_by('-created_at').all()[:3]
             if posts:
-                for post in posts[:3]:
+                for post in posts:
                     menu_items.append(
                         MenuItem(description=u'{}..'.format(post.title[:17]),
                                  method='GET',
@@ -154,7 +154,7 @@ class AddPostView(View):
         new_post.code = hashids.encode(new_post.id)
         new_post.save()
 
-        return HttpResponseRedirect(reverse('post_detail', args=(new_post.id,)))
+        return HttpResponseRedirect(reverse('post_detail', args=[new_post.id]))
 
 
 class MyPostsListView(View):
@@ -181,7 +181,7 @@ class MyPostsListView(View):
 
 
 class PostDetailView(View):
-    http_method_names = ['get', 'put', 'delete']
+    http_method_names = ['get', 'put', 'patch', 'delete']
 
     def get(self, request, id):
         post = get_object_or_404(Post, id=id)
@@ -190,7 +190,7 @@ class PostDetailView(View):
 
         menu_items = [
             MenuItem(description=u'\n'.join([
-                post.title,
+                post.description,
                 'Author: {}'.format(post.user.username),
                 'Expires in: {}'.format(human(post.expires_at)),
                 'Code: {}'.format(post.code),
@@ -201,8 +201,8 @@ class PostDetailView(View):
             # viewing user is the post owner
             menu_items.extend([
                 MenuItem(description='Renew',
-                         method='GET',
-                         path=reverse('home')),
+                         method='PATCH',
+                         path=reverse('post_detail', args=[post.id])),
                 MenuItem(description='Delete',
                          method='DELETE',
                          path=reverse('post_detail', args=[post.id]))
@@ -224,7 +224,7 @@ class PostDetailView(View):
                           path=reverse('home'))
             ])
 
-        content = Menu(body=menu_items)
+        content = Menu(body=menu_items, header=post.title)
 
         return self.to_response(content)
 
@@ -233,7 +233,7 @@ class PostDetailView(View):
         post = get_object_or_404(Post, id=id)                                    
         post.is_private = True
         post.save()
-        return HttpResponseRedirect(reverse('my_posts'))
+        return HttpResponseRedirect(reverse('post_detail', args=[id]))
 
 
     def delete(self, request, id):
@@ -241,7 +241,25 @@ class PostDetailView(View):
         post.delete()
         return HttpResponseRedirect(reverse('my_posts'))
 
+    def patch(self, request, id):
+        # method currently used only for renewing an existing post validity
+        post = get_object_or_404(Post, id=id)
+        now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+        expires_at = now + datetime.timedelta(days=14)
+        post.expires_at = expires_at
+        post.save()
+        return HttpResponseRedirect(reverse('post_detail', args=[id]))
+
+
 class SearchWizardView(View):
     http_method_names = ['get', 'post']
-    pass
+    # see def filtered_search in api/services/post.py - exclude expired, check if code, match username, post title, post bodies
+
+    def post(self, request):
+        pass
+        # this will take a keyword and display a list of matching results
+
+    def get(seld, request, id):
+        pass
+        # this will redirect to post_detail with that specific id
     
