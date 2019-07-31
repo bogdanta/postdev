@@ -187,7 +187,7 @@ class MyPostsListView(View):
 
 
 class PostDetailView(View):
-    http_method_names = ['get', 'put', 'patch', 'delete']
+    http_method_names = ['get', 'put', 'delete']
 
     def get(self, request, id):
         post = get_object_or_404(Post, id=id)
@@ -220,8 +220,8 @@ class PostDetailView(View):
             # viewing user is the post owner
             menu_items.extend([
                 MenuItem(description='Renew',
-                         method='PATCH',
-                         path=reverse('post_detail', args=[post.id])),
+                         method='PUT',
+                         path=reverse('post_detail', args=[post.id]) + '?attr=renew'),
                 MenuItem(description='Delete',
                          method='DELETE',
                          path=reverse('post_detail', args=[post.id]))
@@ -230,29 +230,39 @@ class PostDetailView(View):
                 menu_items.extend([
                     MenuItem(description='Make private',
                              method='PUT',
-                             path=reverse('post_detail', args=[post.id]))
+                             path=reverse('post_detail', args=[post.id]) + '&attr=is_private')
                ])
 
         else:
              menu_items.extend([
+                 MenuItem(description='-- Options under development:'),
                  MenuItem(description='Send message',
                           method='GET',
-                          path=reverse('home')),
+                          path=reverse('post_detail', args=[post.id])),
                  MenuItem(description='Comments',
                           method='GET',
-                          path=reverse('home'))
+                          path=reverse('post_detail', args=[post.id]))
             ])
 
-        content = Menu(body=menu_items, header=post.title)
+        content = Menu(body=menu_items, header=post.title, footer='Reply MENU')
 
         return self.to_response(content)
 
     def put(self, request, id):
-        # method currently used only for marking a public post as private
         post = get_object_or_404(Post, id=id)                                    
-        post.is_private = True
+
+        if request.GET['attr'] == 'is_private':
+            post.is_private = True
+            cache.set('post_private', True)
+        else:
+            #request is for renewal
+            now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+            expires_at = now + datetime.timedelta(days=14)
+            post.expires_at = expires_at
+            post.save()
+            cache.set('post_renewed', True)
+
         post.save()
-        cache.set('post_private', True)
         return HttpResponseRedirect(reverse('post_detail', args=[id]))
 
 
@@ -262,26 +272,57 @@ class PostDetailView(View):
         cache.set('post_deleted', True)
         return HttpResponseRedirect(reverse('my_posts'))
 
-    def patch(self, request, id):
-        # method currently used only for renewing an existing post validity
-        post = get_object_or_404(Post, id=id)
-        now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
-        expires_at = now + datetime.timedelta(days=14)
-        post.expires_at = expires_at
-        post.save()
-        cache.set('post_renewed', True)
-        return HttpResponseRedirect(reverse('post_detail', args=[id]))
-
 
 class SearchWizardView(View):
     http_method_names = ['get', 'post']
-    # see def filtered_search in api/services/post.py - exclude expired, check if code, match username, post title, post bodies
 
-    def post(self, request):
-        pass
-        # this will take a keyword and display a list of matching results
+    def get(self, request):
+        form_items = [
+            FormItemContent(type=FormItemContentType.string,
+                     name='keyword',
+                     description='Send code or keyword to search',
+                     header='search',
+                     footer='Send code or keyword')
+        ]
+        form = Form(body=form_items,
+                    method='POST',
+                    path=reverse('search_wizard'),
+                    meta=FormMeta(confirmation_needed=False,
+                                  completion_status_in_header=False,
+                                  completion_status_show=False))
 
-    def get(seld, request, id):
-        pass
-        # this will redirect to post_detail with that specific id
+        return self.to_response(form)
     
+    def post(self, request):
+        keyword = request.POST['keyword']
+        # first check if keyword matches a post code
+        if len(keyword) == 6:
+            post = Post.objects.filter(code=keyword.lower())
+            if post:
+                return HttpResponseRedirect(reverse('post_detail', args=[post[0].id]))
+
+        # search in titles and post descriptions
+        qs1 = Post.objects.filter(title__icontains=keyword).all()
+        qs2 = Post.objects.filter(description__icontains=keyword).all()
+        posts = qs1 | qs2
+
+        menu_items = []
+        if posts:
+            if len(posts) == 1:
+                return HttpResponseRedirect(reverse('post_detail', args=[posts[0].id]))
+
+            footer = u'Select an option'
+            for post in posts:
+                menu_items.append(
+                    MenuItem(description=u'{}..'.format(post.title[:15]),
+                             method='GET',
+                             path=reverse('post_detail', args=[post.id]))
+                )
+        else:
+            menu_items.append(
+                MenuItem(description='There are no posts matching your keyword.')
+            )
+            footer = u'Reply MENU'
+        content = Menu(body=menu_items, header='search', footer=footer)
+
+        return self.to_response(content)
