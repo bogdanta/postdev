@@ -8,3 +8,4 @@ PyJWT==1.7.1
 requests==2.9.1
 hashids==1.1.0
 ago==0.0.93
+gunicorn==19.9.0
