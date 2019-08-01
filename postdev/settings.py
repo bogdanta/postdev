@@ -23,6 +23,14 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'ttgfg&)=_wx!274!ie5pfsxe-%87b48dkh$hl*fb$#!45c(j9@'
 
+# permissions granted for Notification, Postboard and User endpoints on restdapi
+APP_APIKEY_POC = 'W6LmGDsM.eca6e9e1-df2c-4307-bd75-6299a74e32f8'
+APP_APIKEY_STAGING = '' # can't be created for the moment
+
+# restdapi URLs for dev and prod
+RESTD_API_URL_POC = 'https://developer-api-poc.onem.zone/api/{endpoint}'
+RESTD_API_URL_STAGING = 'http://ledger.dhq.onem:6212/api/{endpoint}'
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
