@@ -7,5 +7,6 @@ urlpatterns = [
     path('search_wizard', views.SearchWizardView.as_view(), name='search_wizard'),
     path('my_posts', views.MyPostsListView.as_view(), name='my_posts'),
     path('post_detail/<int:id>/', views.PostDetailView.as_view(), name='post_detail'),
+    path('send_msg/<int:id>/', views.SendMessageView.as_view(), name='send_msg'),
 ]
 

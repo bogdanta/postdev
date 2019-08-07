@@ -8,6 +8,7 @@ import string
 from ago import human
 from hashids import Hashids
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
@@ -213,6 +214,12 @@ class PostDetailView(View):
         elif cache.get('post_renewed'):
             body_pre.insert(0, 'Post successfuly renewed!')
             cache.delete('post_renewed')
+        elif cache.get('msg_sent'):
+            body_pre.insert(0, 'Your message successfuly sent!')
+            cache.delete('msg_sent')
+        elif cache.get('msg_not_sent'):
+            body_pre.insert(0, 'Message was not sent, please try again later!')
+            cache.delete('msg_sent')
 
         menu_items.extend([MenuItem(description=u'\n'.join(body_pre))])
 
@@ -235,11 +242,10 @@ class PostDetailView(View):
 
         else:
              menu_items.extend([
-                 MenuItem(description='-- Options under development:'),
                  MenuItem(description='Send message',
                           method='GET',
-                          path=reverse('post_detail', args=[post.id])),
-                 MenuItem(description='Comments',
+                          path=reverse('send_msg', args=[post.id])),
+                 MenuItem(description='Comments - WIP',
                           method='GET',
                           path=reverse('post_detail', args=[post.id]))
             ])
@@ -326,3 +332,44 @@ class SearchWizardView(View):
         content = Menu(body=menu_items, header='search', footer=footer)
 
         return self.to_response(content)
+
+
+class SendMessageView(View):
+    http_method_names = ['get', 'post']
+
+    def get(self, request, id):
+        form_items = [
+            FormItemContent(type=FormItemContentType.string,
+                     name='message',
+                     description='Reply with your message for the post owner.',
+                     header='Message',
+                     footer='Send code or keyword')
+        ]
+        form = Form(body=form_items,
+                    method='POST',
+                    path=reverse('send_msg', args=[id]),
+                    meta=FormMeta(confirmation_needed=False,
+                                  completion_status_in_header=False,
+                                  completion_status_show=False))
+
+        return self.to_response(form)
+
+    def post(self, request, id):
+        message = request.POST['message']
+        post = get_object_or_404(Post, id=id)
+
+        headers = {'X-API-KEY': settings.APP_APIKEY_POC, 'Content-Type': 'application/json'}
+        notify_url = settings.RESTD_API_URL_POC.format(endpoint='users/{}/notify').format(post.user.id)
+        body = {
+            'header': 'postdev - {}'.format(post.title[:13]),
+            'body': message,
+            'footer': 'Reply #postdev'
+        }
+
+        response = requests.post(url=notify_url, json=body, headers=headers)
+        if response.status_code == 200:
+            cache.set('msg_sent', True)
+        else:
+            cache.set('msg_not_sent', True)
+
+        return HttpResponseRedirect(reverse('post_detail', args=[id]))
