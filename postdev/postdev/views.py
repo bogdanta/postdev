@@ -362,7 +362,7 @@ class SendMessageView(View):
         notify_url = settings.RESTD_API_URL_POC.format(endpoint='users/{}/notify').format(post.user.id)
         body = {
             'header': 'postdev - {}'.format(post.title[:13]),
-            'body': message,
+            'body': u'\n'.join([message, 'Sent by: {}'.format(self.get_user().username)]),
             'footer': 'Reply #postdev'
         }
 
