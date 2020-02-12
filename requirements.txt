@@ -1,4 +1,4 @@
-Django==2.2.4
+Django==2.2.10
 ipdb==0.10.3
 ipython==7.6.0
 onem-py==1.3
